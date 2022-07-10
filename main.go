@@ -13,14 +13,7 @@ func main() {
 	start := time.Now()
 	fmt.Printf("[%v] Scan started\n", start.Format("2006-01-02 15:04:05"))
 
-	//single ip scan
-	if args.StartIp.Equal(args.EndIp) {
-		scan(args.StartIp, args.Ports)
-		return
-	}
-
-	//range ip scan
-	for ip := args.StartIp; !ip.Equal(args.EndIp); ip = getNextIP(ip) {
+	for ip := args.StartIp; bytes.Compare(ip, args.EndIp) < 1; ip = getNextIP(ip) {
 		scan(ip, args.Ports)
 	}
 
