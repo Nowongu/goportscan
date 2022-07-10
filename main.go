@@ -8,27 +8,57 @@ import (
 )
 
 func main() {
-	//todo: read ports from -p --ports arguments
-	ports := [15]uint16{80, 81, 443, 4550, 5160, 5511, 5550, 5554, 8080, 6550, 7000, 8000, 8866, 56000, 10000}
-	var results []chan ConnectResult
+	args := ParseArgs()
 
-	for ip := net.IPv4zero.To4(); !ip.Equal(net.IPv4bcast); ip = getNextIP(ip) {
-		start := time.Now()
-		//go routines to make requests on ports concurrently
-		for _, port := range ports {
-			results = append(results, canConnect(ip, port))
-		}
+	start := time.Now()
+	fmt.Printf("[%v] Scan started\n", start.Format("2006-01-02 15:04:05"))
 
-		//https://go.dev/blog/pipelines
-		//go routines to display results as they return from the host using the fanIn pattern
-		for result := range merge(results) {
-			if result.Ok {
-				fmt.Printf("%v\tconnected\n", result.Host)
-			}
-		}
-		stop := time.Now()
-		fmt.Printf("%v complete in %v\n", ip, stop.Sub((start)).Seconds())
+	//single ip scan
+	if args.StartIp.Equal(args.EndIp) {
+		scan(args.StartIp, args.Ports)
+		return
 	}
+
+	//range ip scan
+	for ip := args.StartIp; !ip.Equal(args.EndIp); ip = getNextIP(ip) {
+		scan(ip, args.Ports)
+	}
+
+	end := time.Now()
+	fmt.Printf("[%v] Scan complete\nDuration:%v\n", end.Format("2006-01-02 15:04:05"), end.Sub(start))
+}
+
+func getNextIP(cur net.IP) net.IP {
+	//from least to most significant byte
+	for i := len(cur) - 1; i >= 0; i-- {
+		cur[i]++
+
+		//if overflow then increment the next significant byte
+		if cur[i] != 0 {
+			return cur
+		}
+	}
+
+	return cur
+}
+
+func scan(ip net.IP, ports []uint16) {
+	var results []chan ConnectResult
+	start := time.Now()
+	//go routines to make requests on ports concurrently
+	for _, port := range ports {
+		results = append(results, canConnect(ip, port))
+	}
+
+	//https://go.dev/blog/pipelines
+	//go routines to display results as they return from the host using the fanIn pattern
+	for result := range merge(results) {
+		if result.Ok {
+			fmt.Printf("%v\tconnected\n", result.Host)
+		}
+	}
+	stop := time.Now()
+	fmt.Printf("%v complete in %0f seconds\n", ip, stop.Sub((start)).Seconds())
 }
 
 type ConnectResult struct {
@@ -84,18 +114,4 @@ func merge(cs []chan ConnectResult) <-chan ConnectResult {
 		close(out)
 	}()
 	return out
-}
-
-func getNextIP(cur net.IP) net.IP {
-	//from least to most significant byte
-	for i := len(cur) - 1; i >= 0; i-- {
-		cur[i]++
-
-		//if it overflowed then increment the next significant byte
-		if cur[i] != 0 {
-			return cur
-		}
-	}
-
-	return cur
 }
